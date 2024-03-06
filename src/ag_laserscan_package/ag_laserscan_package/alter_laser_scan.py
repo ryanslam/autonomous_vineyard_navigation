@@ -32,11 +32,33 @@ class AlterLaserScan(Node):
     def alter_scan_callback(self, msg):
         scan = msg
         ranges = scan.ranges
+        windowsize = 5
+        # print(ranges)
 
-        i = 0
-        while(i<len(ranges)):
-            ranges[i] = ranges[i+1] = min(ranges[i], ranges[i+1])
-        i+=2
+        Ta = min(ranges[30:150])
+        Tb = min(ranges[210:330])
+
+        # for i in range(30,90):
+        #     Ki = Ta*(1/math.sin(math.radians(90-i)))
+        #     if(ranges[i] > Ki):
+        #         ranges[i] = Ki  
+        #     print(ranges[i])
+
+        print(ranges[90])
+        for i in range(30,150):
+            Kj = Ta/math.cos(math.radians(i-90))
+            if(ranges[i] > Kj):
+                ranges[i] = Kj
+
+        for j in range(210,330):
+            K = Tb/math.cos(math.radians(270-j))
+            if(ranges[j] > K):
+                # print(K)
+                ranges[j] = K
+        #     # print(max(ranges[91:150]))
+
+        scan.ranges = ranges
+        # print(ranges)
 
         self.pub_scan.publish(scan)
         
