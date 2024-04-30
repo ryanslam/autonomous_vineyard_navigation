@@ -17,6 +17,12 @@ class Driver(Node):
             '/ag/percept/dist_and_angle',
             self.driver_callback,
             10)
+        
+        self.cross_track_sub = self.create_subscription(
+            Float32,
+            '/ag/percept/cross_track_error',
+            self.cross_track_callback,
+            10)
 
         self.angular_conf_sub = self.create_subscription(
             Float32,
@@ -24,9 +30,9 @@ class Driver(Node):
             self.set_drive_flag,
             10)
 
-        self.control_pub = self.create_publisher(Twist, 'rov/control', 10)
+        self.control_pub = self.create_publisher(Twist, '/r4/cmd_vel', 10)
         timer_period = 0.1  # seconds
-        self.timer = self.create_timer(timer_period, self.control_callback)
+        # self.timer = self.create_timer(timer_period, self.control_callback)
         self.i = 0
         
         self.lat_err = 0
@@ -35,19 +41,41 @@ class Driver(Node):
         self.u_lx = 0
         self.uaz = 0
 
-        self.kp_theta = 0.1
-        self.kp_lat = 0.1
+        self.kp_theta = 0.008
+        self.kp_lat = 0.2
 
         self.drive_lock = 0
+        self.cross_track_err = 0
+
+    def cross_track_callback(self, msg):
+        self.cross_track_err = msg.data
         
 
     def driver_callback(self, msg):
-        self.lat_err = 0 - (msg.x - msg.y)
-        print(self.lat_err)
+        msg_twist = Twist()
+        self.lat_err = self.cross_track_err
+        #print(self.lat_err)
         self.ang_err = 0 - msg.theta
 
-        self.u_lx = .1
+        if(abs(self.lat_err)<1):
+            self.u_lx = .3
+        else:
+            self.u_lx = 0
         self.uaz = self.kp_theta*self.ang_err + self.kp_lat*self.lat_err
+        print('angular: ' + str(self.kp_theta*self.ang_err))
+        print('lateral: ' + str(self.kp_lat*self.lat_err))
+        ls = [self.ang_err, self.kp_theta*self.ang_err, self.kp_lat*self.lat_err]
+        # print(ls)
+        if(self.uaz > .3):
+            self.uaz = .3
+        elif(self.uaz < -.3):
+            self.uaz = -.3
+
+        msg_twist.linear.x = float(self.u_lx)
+        msg_twist.angular.z = float(self.uaz)
+
+        self.control_pub.publish(msg_twist)
+
 
     def control_callback(self):
         msg = Twist()

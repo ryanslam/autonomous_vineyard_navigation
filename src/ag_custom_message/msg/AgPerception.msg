@@ -1,0 +1,2 @@
+float64 front_confidence
+float64 back_confidence

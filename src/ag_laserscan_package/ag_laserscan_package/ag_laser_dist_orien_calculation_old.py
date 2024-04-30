@@ -24,12 +24,13 @@ class AgDistOrienCalc(Node):
 
         self.subscription = self.create_subscription(
             msg_type=LaserScan,
-            topic='ag/perception/altered_scan',
+            topic='/scan',
             callback=self.retrieve_dist_and_angle_callback,
             qos_profile=qos_profile,)
         
         self.pub = self.create_publisher(Pose2D, "/ag/percept/dist_and_angle", 10)
         self.float_pub = self.create_publisher(Float32, "/ag/percept/lidar_confidence", 10)
+        self.cross_track_err_pub = self.create_publisher(Float32, "/ag/percept/cross_track_error", 10)
 
         self.offset = 45
         
@@ -37,6 +38,9 @@ class AgDistOrienCalc(Node):
         self.measured_ratio =   [0.7, 0.9, 1.1, 1.3, 1.5, 1.9]
 
         self.confidence_matrix = np.zeros((2,8))
+
+        self.angle_arr_left = []
+        self.angle_arr_right = []
 
         # self.actual_dist =      [0.7, 0.9, 1.1, 1.35, 1.5, 1.7, 1.9, 2.1]
         # self.measured_ratio =   [0.27, 0.5, 0.69, 1.1, 1.3, 1.5, 2.8, 2.9]
@@ -66,11 +70,21 @@ class AgDistOrienCalc(Node):
             return math.atan(point_one_avg/point_two_avg)
         except:
             return None
+        
+    def moving_avg_filter(self, new_value, values, window_size=10):
+        avg = 0
+        if(len(values) >= 10):
+            values.pop(0)
+            avg = sum(values)/window_size
+        values.append(new_value)
+        return avg
 
     # Retrieve ratios of the rover based on minimum value scan.
     def retrieve_dist_and_angle_callback(self, scan):
         msg = Pose2D()
         float_msg = Float32()
+        cross_track_err_msg = Float32()
+        
         window_size = 10
         laser_ranges = scan.ranges
 
@@ -130,6 +144,16 @@ class AgDistOrienCalc(Node):
         if(l_ranges_front and r_ranges_front):
             l3l4 = d1_l3/d2_l4
 
+        min_angle_diff_l = 90-(np.argmin(np.array(laser_ranges[30:150]))+30)
+        min_angle_l_avg = self.moving_avg_filter(min_angle_diff_l, self.angle_arr_left)
+        print("unfiltered angle left: ", min_angle_diff_l)
+        print("filtered angle left: ", min_angle_l_avg)
+
+        min_angle_diff_r = 270-(np.argmin(np.array(laser_ranges[210:330]))+210)
+        min_angle_r_avg = self.moving_avg_filter(min_angle_diff_r, self.angle_arr_right)
+        print("unfiltered angle right: ", min_angle_diff_r)
+        print("filtered angle right: ", min_angle_r_avg)
+
         # test_val =  2.875
         k_arr = self.obtain_gain()
         est_k_front = self.scale_gains(k_arr, l1l2)
@@ -155,8 +179,14 @@ class AgDistOrienCalc(Node):
         # print('0-180:' + f'{sum(laser_ranges[88:93])/len(laser_ranges[88:93]):.2f}')
         # print('180-360:' + f'{sum(laser_ranges[268:273])/len(laser_ranges[268:273]):.2f}')
 
-        left = sum(laser_ranges[88:93])/len(laser_ranges[88:93])
-        right = sum(laser_ranges[268:273])/len(laser_ranges[268:273])
+        # left = sum(laser_ranges[88:93])/len(laser_ranges[88:93])
+        # right = sum(laser_ranges[268:273])/len(laser_ranges[268:273])
+        left = min(laser_ranges[45:135])
+        right = min(laser_ranges[225:315])
+        cross_track_error = left-right
+        cross_track_err_msg.data = cross_track_error
+        self.cross_track_err_pub.publish(cross_track_err_msg)
+
         print("l: ", min(laser_ranges[45:135]))
         print("r: ", min(laser_ranges[225:315]))
 
@@ -172,17 +202,17 @@ class AgDistOrienCalc(Node):
         # print(dist_and_angle)
         # json_string = json.dumps(dist_and_angle)
         # msg.data = json_string
-        if math.isinf(left):
+        if math.isinf(min(laser_ranges[45:135])):
             msg.x = 0.0
         else:
-            msg.x = left
+            msg.x = min(laser_ranges[45:135])
             
-        if math.isinf(right):
+        if math.isinf(min(laser_ranges[225:315])):
             msg.y = 0.0
         else:
-            msg.y = right
+            msg.y = min(laser_ranges[225:315])
 
-        msg.theta = 0.0
+        msg.theta = (min_angle_l_avg + min_angle_r_avg)/2
         self.pub.publish(msg)
 
     def find_angle_confidence(self, prev_angle_arr, angle_arr, max_angle_dif):
