@@ -3,6 +3,7 @@ from rclpy.node import Node
 from std_msgs.msg import String, Float32
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Pose2D
+from ag_custom_message.msg import LidarData
 
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 
@@ -28,9 +29,20 @@ class AgVineyardRowLineFitting(Node):
             callback=self.filter_raw_scan,
             qos_profile=qos_profile,)
         
+        self.cross_track_err_pub = self.create_publisher(Float32, "/ag/percept/crosstrack_err", 10)
+        self.heading_pub = self.create_publisher(Float32, "/ag/percept/heading_err", 10)
+        self.max_front = self.create_publisher(Float32, "/ag/percept/max_front", 10)
+        
         self.max_scan_range = 5
 
+        self.cross_track_err = 0
         self.ranges = []
+
+        self.dist_arr_left = []
+        self.dist_arr_right = []
+
+        self.angle_arr_left = []
+        self.angle_arr_right = []
   
     def is_within_range(self, value) -> bool:
         return value <= self.max_scan_range
@@ -95,6 +107,14 @@ class AgVineyardRowLineFitting(Node):
         clusters.fit(X)
 
         labels = clusters.labels_
+    
+    def moving_avg_filter(self, new_value, values, window_size=10):
+        avg = 0
+        if(len(values) >= 10):
+            values.pop(0)
+            avg = sum(values)/window_size
+        values.append(new_value)
+        return avg
 
     def determine_range(self, scan, area_of_interest) -> int:
         polar_coords = self.get_polar_coordinates(scan, area_of_interest)
@@ -110,31 +130,72 @@ class AgVineyardRowLineFitting(Node):
 
         if not(self.is_valid_line(cartesian_coords)):
             print("Unable to produce valid line.")
-            return -1
+            return [None, None]
         
         # slope, intercept = np.polyfit(cartesian_coords[1], cartesian_coords[0], deg=1)
-        print("X: %s\nY: %s" % (str(cartesian_coords[0]), str(cartesian_coords[1])))
-        # print("Slope: %f" % (slope))
+        # print("X: %s\nY: %s" % (str(cartesian_coords[0]), str(cartesian_coords[1])))
+        # print("Slope: %f" % (slope))ros2 run pointcloud_to_laserscan pointcloud_to_laserscan_node --ros-args --remap cloud_in:=/quanergy/points
+
 
         line_parameters = self.get_line_parameters(cartesian_coords)
-        distance = self.get_shortest_distance(line_parameters, (0,0))
+        distance = abs(self.get_shortest_distance(line_parameters, (0,0)))
         heading = -math.degrees(math.atan(line_parameters[0]))
         distance_to_point = math.sqrt(cartesian_coords[0][0]**2+cartesian_coords[1][0]**2)
-        cross_track_err = distance_to_point
+
+        if distance < 1:
+            return [None, None]
 
         print('-------------------------------------------------------')
         print("Scan Range: %s" % (str(area_of_interest)))
-        print("Slope: %f\nDistance: %f\nDegrees: %f\nCross Track Err: %f" % (line_parameters[0], distance, heading, cross_track_err))
+        print("Slope: %f\nDistance: %f\nDegrees: %f\nDistance to point: %f" % (line_parameters[0], distance, heading, distance_to_point))
         print('-------------------------------------------------------')
 
-        return 0
+        return (distance, heading)
 
     def filter_raw_scan(self, msg):
+        lidar_data_msg = LidarData()
+        max_front_msg = Float32()
         scan = msg.ranges
-        # left_scan = self.determine_range(scan, [89, 179])
-        left_scan = self.determine_range(scan, [179,329])
-        # print("Left return code: %d" % (left_scan))
-        print("Left return code: %d" % (left_scan))
+        right_scan, right_heading = self.determine_range(scan, [89, 159])
+        if(right_scan != None):
+            right_scan = self.moving_avg_filter(right_scan, self.dist_arr_right)
+            right_heading = self.moving_avg_filter(right_heading, self.angle_arr_right)
+        left_scan, left_heading = self.determine_range(scan, [199,269])
+        if(left_scan!=None):
+            left_scan = self.moving_avg_filter(left_scan, self.dist_arr_left)
+            left_heading = self.moving_avg_filter(left_heading, self.angle_arr_left)
+
+        max_front_msg.data = scan[179]
+        print("Max dist: %f" % max_front_msg.data)
+        self.max_front.publish(max_front_msg)
+
+        if(left_scan != None and right_scan != None):
+            headings = [left_heading, right_heading]
+
+            if(abs(left_heading) - abs(right_heading) > 10):
+                select = np.argmin([abs(left_heading), abs(right_heading)])
+                print(select)
+            else:
+                headings = [left_heading+right_heading/2,left_heading+right_heading/2]
+                select = 0
+
+            print(select)
+            heading = headings[select]
+            self.cross_track_err = left_scan - right_scan
+            cross_track_msg = Float32()
+            heading_msg = Float32()
+            cross_track_msg.data = float(self.cross_track_err)
+            heading_msg.data = float(heading)
+
+            print('-------------------------------------------------------')
+            print('Crosstrack Error: %f' % self.cross_track_err)
+            print('Heading: %f' % heading)
+            print('-------------------------------------------------------')
+            # print("Left return code: %d" % (left_scan))
+            print("Return code: %d" % (left_scan))
+            self.cross_track_err_pub.publish(cross_track_msg)
+            self.heading_pub.publish(heading_msg)
+        
 
 def main(args=None):
     rclpy.init(args=args)
