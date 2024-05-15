@@ -54,7 +54,6 @@ class AgVineyardTruthDataVerification(Node):
         if self.zed_camera.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
             self.zed_camera.retrieve_image(self.image, sl.VIEW.LEFT)
             self.image_ocv = self.image.get_data()
-            self.zed_camera.retrieve_measure(self.depth_map, sl.MEASURE.DEPTH)
             self.zed_camera.retrieve_measure(self.point_cloud, sl.MEASURE.XYZRGBA)
             return 1
         return INVALID_VALUE
@@ -62,10 +61,14 @@ class AgVineyardTruthDataVerification(Node):
     def get_pixel_distance(self, x, y) -> tuple:
         if self.is_valid_value(x) and self.is_valid_value(y):
             point3D = self.point_cloud.get_value(x,y)
-            return math.sqrt(point3D[0]**2 + point3D[1]**2 + point3D[2]**2)
+            print(point3D)
+            px, py, pz = point3D[1][0], point3D[1][1], point3D[1][2]
+            print('x: %f\tdist: %f' % (x, math.sqrt(px**2 + py**2 + pz**2)))
+            return (sl.ERROR_CODE.SUCCESS, math.sqrt(px**2 + py**2 + pz**2))
         return (sl.ERROR_CODE.FAILURE, INVALID_VALUE)
 
     def get_lateral_dist_from_center(self, d1, d2):
+        # print(math.sqrt(d1**2-d2**2))
         return math.sqrt(max(d1,d2)**2 - min(d1,d2)**2)
 
     # Distance in meters.
@@ -169,7 +172,7 @@ class AgVineyardTruthDataVerification(Node):
 
     def timer_callback(self):
 
-        if self.get_depth_map_and_image() == INVALID_VALUE:
+        if self.get_point_cloud_and_image() == INVALID_VALUE:
             print("Unable to connect to zed camera.")
             return INVALID_VALUE
 
@@ -179,12 +182,10 @@ class AgVineyardTruthDataVerification(Node):
 
         heading = self.slope_to_heading(slope)
         cross_track_err = self.get_crosstrack_error()
+        print(cross_track_err)
 
         if self.is_valid_value(slope) and self.is_valid_value(cross_track_err):
             heading_avg = self.moving_avg_filter(heading, self.heading_avg)
-            cross_track_err = self.moving_avg_filter(
-                cross_track_err, self.cross_track_avg
-            )
             print("Heading: %f\nXTE: %f" % (heading_avg, cross_track_err))
         else:
             print(slope)
@@ -206,8 +207,6 @@ def main(args=None):
     # when the garbage collector destroys the node object)
     ag_vineyard_verification.destroy_node()
     rclpy.shutdown()
-
-    strap_dist_code, strap_dist = self.get_pixel_distance(x, half_height)
 
     # print('Center Distance: (%s,%f)' % (center_dist_code, center_dist))
     # print('Strap Distance: (%s,%f)'
