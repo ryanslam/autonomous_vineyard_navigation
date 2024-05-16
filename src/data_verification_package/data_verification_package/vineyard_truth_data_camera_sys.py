@@ -44,28 +44,29 @@ class AgVineyardTruthDataVerification(Node):
 
         self.image = sl.Mat(self.image_height, self.image_width, sl.MAT_TYPE.U8_C4)
         self.image_ocv = None
-        self.depth_map = sl.Mat()
+        self.point_cloud = sl.Mat()
 
         self.cross_track_avg = []
         self.heading_avg = []
 
-    def get_depth_map_and_image(self) -> int:
+    def get_point_cloud_and_image(self) -> int:
         runtime_parameters = sl.RuntimeParameters()
         if self.zed_camera.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
             self.zed_camera.retrieve_image(self.image, sl.VIEW.LEFT)
             self.image_ocv = self.image.get_data()
             self.zed_camera.retrieve_measure(self.depth_map, sl.MEASURE.DEPTH)
+            self.zed_camera.retrieve_measure(self.point_cloud, sl.MEASURE.XYZRGBA)
             return 1
         return INVALID_VALUE
 
     def get_pixel_distance(self, x, y) -> tuple:
         if self.is_valid_value(x) and self.is_valid_value(y):
-            print("x: %f" % (self.depth_map.get_value(x, y)[1]))
-            return self.depth_map.get_value(x, y)
+            point3D = self.point_cloud.get_value(x,y)
+            return math.sqrt(point3D[0]**2 + point3D[1]**2 + point3D[2]**2)
         return (sl.ERROR_CODE.FAILURE, INVALID_VALUE)
 
-    def get_lateral_dist_from_center(self, p1, p2):
-        return math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
+    def get_lateral_dist_from_center(self, d1, d2):
+        return math.sqrt(max(d1,d2)**2 - min(d1,d2)**2)
 
     # Distance in meters.
     def get_crosstrack_error(self, center_dist=None) -> float:
@@ -84,7 +85,7 @@ class AgVineyardTruthDataVerification(Node):
         # print('Strap Distance: (%s,%f)' % (strap_dist_code, strap_dist))
         if self.is_valid_value(center_dist) and self.is_valid_value(strap_dist):
             xte = self.get_lateral_dist_from_center(
-                (x, strap_dist), (half_width, center_dist)
+                strap_dist, center_dist
             )
             if x < half_width:
                 xte *= -1
@@ -177,7 +178,7 @@ class AgVineyardTruthDataVerification(Node):
         slope = self.get_line_slope()
 
         heading = self.slope_to_heading(slope)
-        cross_track_err = self.get_crosstrack_error(0.71)
+        cross_track_err = self.get_crosstrack_error()
 
         if self.is_valid_value(slope) and self.is_valid_value(cross_track_err):
             heading_avg = self.moving_avg_filter(heading, self.heading_avg)
