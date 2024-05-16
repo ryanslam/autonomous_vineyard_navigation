@@ -13,7 +13,6 @@ INVALID_VALUE = -88888888
 
 
 class AgVineyardTruthDataVerification(Node):
-
     def __init__(self):
         super().__init__("ag_vineyard_verification")
 
@@ -61,12 +60,12 @@ class AgVineyardTruthDataVerification(Node):
 
     def get_pixel_distance(self, x, y) -> tuple:
         if self.is_valid_value(x) and self.is_valid_value(y):
-            print('x: %f' % (self.depth_map.get_value(x, y)[1]))
+            print("x: %f" % (self.depth_map.get_value(x, y)[1]))
             return self.depth_map.get_value(x, y)
         return (sl.ERROR_CODE.FAILURE, INVALID_VALUE)
 
-    def get_lateral_dist_from_center(self, d1, d2):
-        return math.sqrt(max(d1, d2) ** 2 - min(d1, d2) ** 2)
+    def get_lateral_dist_from_center(self, p1, p2):
+        return math.sqrt((p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2)
 
     # Distance in meters.
     def get_crosstrack_error(self, center_dist=None) -> float:
@@ -84,12 +83,14 @@ class AgVineyardTruthDataVerification(Node):
         # print('Center Distance: (%s,%f)' % (center_dist_code, center_dist))
         # print('Strap Distance: (%s,%f)' % (strap_dist_code, strap_dist))
         if self.is_valid_value(center_dist) and self.is_valid_value(strap_dist):
-            xte = self.get_lateral_dist_from_center(strap_dist, center_dist)
+            xte = self.get_lateral_dist_from_center(
+                (x, strap_dist), (half_width, center_dist)
+            )
             if x < half_width:
                 xte *= -1
             return xte
         return INVALID_VALUE
-    
+
     def moving_avg_filter(self, new_value, values, window_size=10):
         avg = 0
         if len(values) >= 10:
@@ -109,7 +110,7 @@ class AgVineyardTruthDataVerification(Node):
             # if px_1 == px_2:
             #     raise Exception(ZeroDivisionError)
             print("Point 1: (%d, %d)\nPoint 2: (%d, %d)" % (px_1, py_1, px_2, py_2))
-            slope = (float(px_2) - float(px_1))/(float(py_2) - float(py_1))
+            slope = (float(px_2) - float(px_1)) / (float(py_2) - float(py_1))
         except ZeroDivisionError as divByZero:
             print(divByZero)
             slope = 0
@@ -140,7 +141,9 @@ class AgVineyardTruthDataVerification(Node):
     def is_valid_value(self, value):
         return (
             True
-            if value != INVALID_VALUE and not (np.isnan(value)) and not (math.isinf(value))
+            if value != INVALID_VALUE
+            and not (np.isnan(value))
+            and not (math.isinf(value))
             else False
         )
 
@@ -174,16 +177,17 @@ class AgVineyardTruthDataVerification(Node):
         slope = self.get_line_slope()
 
         heading = self.slope_to_heading(slope)
-        cross_track_err = self.get_crosstrack_error(.71)
+        cross_track_err = self.get_crosstrack_error(0.71)
 
-        if(self.is_valid_value(slope) and self.is_valid_value(cross_track_err)):
+        if self.is_valid_value(slope) and self.is_valid_value(cross_track_err):
             heading_avg = self.moving_avg_filter(heading, self.heading_avg)
-            cross_track_err = self.moving_avg_filter(cross_track_err, self.cross_track_avg)
+            cross_track_err = self.moving_avg_filter(
+                cross_track_err, self.cross_track_avg
+            )
             print("Heading: %f\nXTE: %f" % (heading_avg, cross_track_err))
         else:
             print(slope)
 
-            
         # print("Heading: %f\nSlope: %f\nXTE: %f" % (heading_avg, slope, cross_track_err))
 
         self.publisher_.publish(self.br.cv2_to_imgmsg(processed_image))
@@ -204,5 +208,5 @@ def main(args=None):
 
     strap_dist_code, strap_dist = self.get_pixel_distance(x, half_height)
 
-        # print('Center Distance: (%s,%f)' % (center_dist_code, center_dist))
-        # print('Strap Distance: (%s,%f)' 
+    # print('Center Distance: (%s,%f)' % (center_dist_code, center_dist))
+    # print('Strap Distance: (%s,%f)'

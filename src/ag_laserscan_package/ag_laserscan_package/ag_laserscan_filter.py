@@ -10,7 +10,6 @@ import json
 
 
 class AgLaserscanFilter(Node):
-
     def __init__(self):
         super().__init__("ag_laserscan_filter")
 

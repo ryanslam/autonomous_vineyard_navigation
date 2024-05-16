@@ -10,7 +10,6 @@ import math
 
 
 class AgVineyardTruthDataVerification(Node):
-
     def __init__(self):
         super().__init__("ag_vineyard_verification")
 

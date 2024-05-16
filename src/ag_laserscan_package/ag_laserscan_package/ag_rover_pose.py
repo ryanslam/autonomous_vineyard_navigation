@@ -13,7 +13,6 @@ import json
 
 
 class AgPose2D(Node):
-
     def __init__(self):
         super().__init__("ag_pose_2d")
 

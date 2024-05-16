@@ -14,7 +14,6 @@ import math
 
 
 class AgVineyardRowLineFitting(Node):
-
     def __init__(self):
         super().__init__("ag_line_fitting")
 
@@ -111,7 +110,7 @@ class AgVineyardRowLineFitting(Node):
         A, B, C = self.get_standard_line(line[0], line[1])
 
         numerator = (A * point[0]) + (B * point[1]) + C
-        denominator = math.sqrt(A**2 + B**2)
+        denominator = math.sqrt(A ** 2 + B ** 2)
 
         return numerator / denominator
 

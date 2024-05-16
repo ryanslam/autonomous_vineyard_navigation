@@ -11,7 +11,6 @@ import math
 
 
 class AgDistOrienCalc(Node):
-
     def __init__(self):
         super().__init__("ag_laser_dist_orien_calculation")
 

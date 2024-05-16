@@ -9,7 +9,6 @@ import re
 
 
 class AgTruthDistance(Node):
-
     def __init__(self):
         super().__init__("ag_vineyard_distance")
 
