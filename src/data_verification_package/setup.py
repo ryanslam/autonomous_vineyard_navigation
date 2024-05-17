@@ -19,8 +19,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "ag_data_verification = data_verification_package.vineyard_truth_data_camera_sys:main",
-            "ag_data_distance = data_verification_package.vineyard_truth_data_distance:main",
+            "ag_visual_validation = data_verification_package.zed_vineyard_validation.py:main",
+            "ag_distance_validation = data_verification_package.vineyard_truth_data_distance:main",
         ],
     },
 )
