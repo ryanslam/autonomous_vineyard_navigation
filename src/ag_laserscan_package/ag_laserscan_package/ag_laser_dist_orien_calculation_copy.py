@@ -48,7 +48,6 @@ class AgDistOrienCalc(Node):
         cross_track_err_msg = Float32()
         
         laser_ranges = scan.ranges
-        print("Max Range: %f", (laser_ranges(179)))
 
         min_angle_diff_l = 90-(np.argmin(np.array(laser_ranges[30:150]))+30)
         min_angle_l_avg = self.moving_avg_filter(min_angle_diff_l, self.angle_arr_left)

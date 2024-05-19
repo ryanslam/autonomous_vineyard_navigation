@@ -50,7 +50,7 @@ class AgVineyardRowLineFitting(Node):
     def is_in_area_of_interest(self, degree, area_of_interest) -> bool:
         return degree in range(area_of_interest[0],area_of_interest[1])
     
-    def is_valid_line(self, points) -> bool:
+    def is_valid_line(self , points) -> bool:
         return len(points[0]) > 1 and len(points[1]) > 1
     
     def get_x_from_polar_coords(self, degree, distance) -> float:

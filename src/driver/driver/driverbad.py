@@ -22,13 +22,13 @@ class Driver(Node):
         
         self.cross_track_sub = self.create_subscription(
             Float32,
-            '/ag/percept/crosstrack_err',
+            'ag/percept/cross_track_error',
             self.cross_track_callback,
             10)
 
         self.cross_track_sub = self.create_subscription(
-            Float32,
-            '/ag/percept/heading_err',
+            Pose2D,
+            '/ag/percept/dist_and_angle',
             self.heading_callback,
             10)
 
@@ -39,8 +39,8 @@ class Driver(Node):
             10)
 
         self.control_pub = self.create_publisher(Twist, '/r4/cmd_vel', 10)
-        self.timer_period = 0.1  # seconds
-        self.timer = self.create_timer(self.timer_period, self.driver_callback)
+        timer_period = 0.1  # seconds
+        self.timer = self.create_timer(timer_period, self.driver_callback)
         self.i = 0
         
         self.lat_err = 0
@@ -49,50 +49,34 @@ class Driver(Node):
         self.u_lx = 0
         self.uaz = 0
 
-        self.kp_theta = 0.02
+        self.kp_theta = 0.01
         self.kp_lat = 0.4
-
-        self.ki_lat = 0.08
-        self.integral = 0
-        self.max_integral = 0.05
 
         self.drive_lock = 0
         self.cross_track_err = 0
         self.heading = 0
 
-    def integral_control(self):
-        self.integral += self.timer_period * self.lat_err
-
     def cross_track_callback(self, msg):
         self.cross_track_err = msg.data
     
     def heading_callback(self, msg):
-        self.heading = msg.data
+        self.heading = msg.theta
         
 
     def driver_callback(self):
         msg_twist = Twist()
         self.lat_err = self.cross_track_err
         #print(self.lat_err)
-        self.ang_err = 0 - self.heading
+        self.ang_err = self.heading
 
         if(abs(self.lat_err)<1):
             self.u_lx = .3
         else:
-            self.u_lx = 0       
-        self.integral_control()
-        integral_term = self.ki_lat*self.integral
-        if integral_term >= self.max_integral:
-            integral_term = self.max_integral
-        if integral_term <= -self.max_integral:
-            integral_term = -self.max_integral
-        if abs(self.lat_err) <= 0.05:
-            integral_term = 0
-        self.uaz = (self.kp_theta*self.ang_err + self.kp_lat*self.lat_err) + (integral_term)
-        print('integral: %f' % (integral_term))
-        print('angular: ' + str(self.ang_err))
-        print('lateral: ' + str(self.lat_err))
-        ls = [self.ang_err, self.kp_theta*self.ang_err, self.kp_lat*self.lat_err]
+            self.u_lx = 0
+        self.uaz = - self.kp_theta*self.ang_err - self.kp_lat*self.lat_err
+        print('angular: ' + str(self.kp_theta*self.ang_err))
+        print('lateral: ' + str(self.kp_lat*self.lat_err))
+        # ls = [self.ang_err, self.kp_theta*self.ang_err, self.kp_lat*self.lat_err]
         # print(ls)
         if(self.uaz > .3):
             self.uaz = .3
